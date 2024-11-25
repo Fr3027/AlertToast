@@ -106,6 +106,8 @@ public struct AlertToast: View{
         
         ///Banner from the bottom of the view
         case banner(_ transition: BannerAnimation)
+
+        case bannerWithButton(_ transition: BannerAnimation)
     }
     
     /// Determine what the alert will display
@@ -198,19 +200,22 @@ public struct AlertToast: View{
     
     ///Customize your alert appearance
     public var style: AlertStyle? = nil
+
+    var onTap: (() -> ())? = nil
     
     ///Full init
     public init(displayMode: DisplayMode = .alert,
                 type: AlertType,
                 title: String? = nil,
                 subTitle: String? = nil,
-                style: AlertStyle? = nil){
+                style: AlertStyle? = nil,onTap: (() -> ())? = nil){
         
         self.displayMode = displayMode
         self.type = type
         self.title = title
         self.subTitle = subTitle
         self.style = style
+        self.onTap = onTap
     }
     
     ///Short init with most used parameters
@@ -270,6 +275,58 @@ public struct AlertToast: View{
             .padding([.horizontal, .bottom])
         }
     }
+
+    public var bannerWithButton: some View{
+        VStack{
+            Spacer()
+            
+            //Banner view starts here
+            VStack(alignment: .leading, spacing: 10){
+                HStack{
+                    switch type{
+                    case .complete(let color):
+                        Image(systemName: "checkmark")
+                            .foregroundColor(color)
+                    case .error(let color):
+                        Image(systemName: "xmark")
+                            .foregroundColor(color)
+                    case .systemImage(let name, let color):
+                        Image(systemName: name)
+                            .foregroundColor(color)
+                    case .image(let name, let color):
+                        Image(name)
+                            .renderingMode(.template)
+                            .foregroundColor(color)
+                    case .loading:
+                        ActivityIndicator()
+                    case .regular:
+                        EmptyView()
+                    }
+                    
+                    Text(LocalizedStringKey(title ?? ""))
+                        .font(style?.titleFont ?? Font.headline.bold())
+                }
+                
+                if subTitle != nil{
+                    Text(LocalizedStringKey(subTitle!))
+                        .font(style?.subTitleFont ?? Font.subheadline)
+                }
+                Button(action:{
+                    onTap?()
+                }){
+                    Text("click me")
+                }
+            }
+            .fixedSize(horizontal: true, vertical: false)
+            .multilineTextAlignment(.leading)
+            .textColor(style?.titleColor ?? nil)
+            .padding()
+            .frame(maxWidth: 400, alignment: .leading)
+            .alertBackground(style?.backgroundColor ?? nil)
+            .cornerRadius(10)
+            .padding([.horizontal, .bottom])
+        }
+    }
     
     ///HUD View
     public var hud: some View{
@@ -303,6 +360,7 @@ public struct AlertToast: View{
                         if title != nil{
                             Text(LocalizedStringKey(title ?? ""))
                                 .font(style?.titleFont ?? Font.body.bold())
+
                                 .multilineTextAlignment(.center)
                                 .textColor(style?.titleColor ?? nil)
                         }
@@ -397,6 +455,8 @@ public struct AlertToast: View{
             hud
         case .banner:
             banner
+        case .bannerWithButton:
+            bannerWithButton
         }
     }
 }
@@ -506,6 +566,22 @@ public struct AlertToastModifier: ViewModifier{
                         completion?()
                     })
                     .transition(alert().displayMode == .banner(.slide) ? AnyTransition.slide.combined(with: .opacity) : AnyTransition.move(edge: .bottom))
+            case .bannerWithButton:
+                alert()
+                    .onTapGesture {
+                        onTap?()
+                        if tapToDismiss{
+                            withAnimation(Animation.spring()){
+                                self.workItem?.cancel()
+                                isPresenting = false
+                                self.workItem = nil
+                            }
+                        }
+                    }
+                    .onDisappear(perform: {
+                        completion?()
+                    })
+                    .transition(alert().displayMode == .banner(.slide) ? AnyTransition.slide.combined(with: .opacity) : AnyTransition.move(edge: .bottom))
             }
             
         }
@@ -515,6 +591,19 @@ public struct AlertToastModifier: ViewModifier{
     public func body(content: Content) -> some View {
         switch alert().displayMode{
         case .banner:
+            content
+                .overlay(ZStack{
+                    main()
+                        .offset(y: offsetY)
+                }
+                            .animation(Animation.spring(), value: isPresenting)
+                )
+                .valueChanged(value: isPresenting, onChange: { (presented) in
+                    if presented{
+                        onAppearAction()
+                    }
+                })
+        case .bannerWithButton:
             content
                 .overlay(ZStack{
                     main()
@@ -708,3 +797,4 @@ public extension View{
         }
     }
 }
+
